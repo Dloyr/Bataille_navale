@@ -53,7 +53,9 @@ def gestion_client(client_du_serveur, joueur):
     if len(grilles_des_joueurs) == 2:
         client_du_serveur.send("Tout les bateaux ont été placé, la partie va commencer !".encode("utf-8"))
         autre_client.send("Tout les bateaux ont été placé, la partie va commencer !".encode("utf-8"))
-
+        sleep(1)
+    else:
+        sleep(300)
 #================================================DEBUT DE LA PARTIE================================================
     while True:
         if len(clients) == 2:
@@ -63,9 +65,10 @@ def gestion_client(client_du_serveur, joueur):
 
         with lock: # permet la syncrhonisation de la variable entre les clients
             if tour_joueur != joueur: # verifie si le tour du joueur correspond à son numéro
-                sleep(1)
+                client_du_serveur.send("Ce n'est pas votre tour.".encode("utf-8"))
                 if autre_client:
                     sleep(1)
+                    autre_client.send("C'est votre tour.".encode("utf-8"))
 
 #================================================TRAITEMENT ET RÉPONSE DES ACTIONS EN JEU================================================
         
