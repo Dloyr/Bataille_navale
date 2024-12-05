@@ -6,24 +6,25 @@ Dimitri Loyer
 Yasmine Sassi
 """
 
-from bataille_navale import playerStr
+from bataille_navale import playerStr, parseCoord, shootAt
 from socket import *
 from time import sleep
+
 IP = "127.0.0.1"
 PORT = 12345
 
-bateaux_dict = {"C":5}
-taille_grille  = 10
+bateaux_dict = {"C": 5}
+taille_grille = 10
+
 
 def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
-    grille_str = "." * (grille_taille ** 2)  # grille originale du joueur sous forme de chaine
+    grille_str = ["." for _ in range(grille_taille * grille_taille)]
     grille_double = [["." for _ in range(grille_taille)] for _ in range(grille_taille)]
 
-    def afficher_grille(grid):
-        for x in range(grille_taille):
-            print("".join(grid[x * grille_taille:(x + 1) * grille_taille]))
+    def afficher_grille(grille):
+        print("\n".join("".join(grille[y * grille_taille:(y + 1) * grille_taille]) for y in range(grille_taille)))
 
-    # Afficher la grille initiale
+    print("Grille initiale :")
     afficher_grille(grille_str)
 
     for bateau, taille in dict_bateaux.items():
@@ -40,20 +41,16 @@ def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
                     print("Direction invalide. Réessayez.")
                     continue
 
-                if direction == "h" and x + taille > grille_taille:
-                    print("Le bateau dépasse à droite. Réessayez.")
-                    continue
-                if direction == "v" and y + taille > grille_taille:
-                    print("Le bateau dépasse en bas. Réessayez.")
+                if (direction == "h" and x + taille > grille_taille) or \
+                   (direction == "v" and y + taille > grille_taille):
+                    print("Le bateau dépasse les limites. Réessayez.")
                     continue
 
                 # Vérification des collisions
-                collision = False
-                for i in range(taille):
-                    index = (y * grille_taille + x + i) if direction == "h" else ((y + i) * grille_taille + x)
-                    if grille_str[index] != ".":
-                        collision = True
-                        break
+                collision = any(
+                    grille_double[y + (i if direction == "v" else 0)][x + (i if direction == "h" else 0)] != "."
+                    for i in range(taille)
+                )
 
                 if collision:
                     print("Collision détectée. Réessayez.")
@@ -61,57 +58,75 @@ def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
 
                 # Placement du bateau
                 for i in range(taille):
-                    if direction == "h":
-                        index = (y * grille_taille + x + i)
-                    else:
-                        index = ((y + i) * grille_taille + x)
-
-                    # met a jour la chaine de caractère et la grille double
-                    grille_double[index // grille_taille][index % grille_taille] = bateau
-
-                grille_str = "".join(["".join(rang) for rang in grille_double])
-                placé = True
+                    nx = x + (i if direction == "h" else 0)
+                    ny = y + (i if direction == "v" else 0)
+                    grille_str[ny * grille_taille + nx] = bateau
+                    grille_double[ny][nx] = bateau
 
                 afficher_grille(grille_str)
-
-            except ValueError:
+                placé = True
+            except (ValueError, IndexError):
                 print("Entrée invalide. Réessayez.")
 
-    print("\nGrille finale après placement des bateaux :")
+    print("Placement terminé. Voici votre grille finale :")
     afficher_grille(grille_str)
     return grille_double
 
-def cible():
-    """Fonction pour définir la position sur laquelle on souhaite tirer"""
-    x = int(input("Entrez la coordonnée x du tir (0-9): "))
-    y = int(input("Entrez la coordonnée y du tir (0-9): "))
 
-    return f"{x},{y}"
-
-with socket(AF_INET, SOCK_STREAM) as client: #Connexion au serveur de jeu
+with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
     client.connect((IP, PORT))
     print("Connecté au serveur.\n")
+
+    player = {
+        "grid": None,
+        "history": [["." for _ in range(taille_grille)] for _ in range(taille_grille)]
+    }
 
     while True:
         message_reçu = client.recv(1024).decode("utf-8")
         print(message_reçu)
 
         if "Vous pouvez placer vos bateaux." in message_reçu:
+            # Placement des bateaux et envoi de la grille au serveur
             grille_double = placement_bateaux(taille_grille, bateaux_dict)
-            # créer un joueur pour garder une trace de ce qu'il sait passer sur sa grille et permettre l'affichage des deux grilles en même temps
-            player = {
-                "grid": grille_double,
-                "history": [["." for _ in range(taille_grille)] for _ in range(taille_grille)]
-            }
-            client.sendall("".join(["".join(rang) for rang in grille_double]).encode("utf-8"))
-        elif message_reçu == "C'est votre tour.": #tire quand c'est son tour:
+
+            player["grid"] = grille_double
+            grille_envoyee = "".join(["".join(row) for row in grille_double])
+            client.sendall(grille_envoyee.encode("utf-8"))
+
+        elif message_reçu == "C'est votre tour.":
             sleep(1)
             print(playerStr(player))
-            coordonnées = cible()
-            client.sendall(coordonnées.encode("utf-8"))
+
+            try:
+                coord_char_int = input("Sur quelle cellule souhaitez-vous tirer : ")
+                coordonnées = parseCoord(coord_char_int)
+
+                # Validation des coordonnées
+                if not (0 <= coordonnées[0] < taille_grille and 0 <= coordonnées[1] < taille_grille):
+                    raise ValueError("Coordonnées hors limites.")
+
+                str_coord = f"{coordonnées[0]},{coordonnées[1]}"
+                client.sendall(str_coord.encode("utf-8"))
+
+                colonne = ord(coord_char_int[0].upper()) - ord("A")
+                ligne = int(coord_char_int[1])
+                tuple_coord = (colonne, ligne)
+                print(f"Tir effectué à : {tuple_coord}")
+
+            except ValueError as e:
+                print(f"Erreur : {e}. Réessayez.")
+                continue
+
         elif message_reçu == "Ce n'est pas votre tour.":
             print("En attente que l'adversaire joue...")
-            sleep(300)
-        elif message_reçu == "Fin de la partie. ":
+            sleep(3)
+
+        elif "gagné" in message_reçu or "perdu" in message_reçu:
+            print(message_reçu)
             print("Déconnexion en cours...")
+            break
+
+        elif message_reçu == "Fin de la partie.":
+            print("Partie terminée.")
             break
