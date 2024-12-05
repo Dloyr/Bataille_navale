@@ -114,6 +114,11 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
                 réponse = client.recv(1024).decode("utf-8")
                 print(réponse)
 
+                ligne, colonne = coordonnées
+                if réponse == "Touché !":
+                    joueur["history"][ligne][colonne] = "H"
+                elif réponse == "Raté...":
+                    joueur["history"][ligne][colonne] = "M"
 
             except ValueError as e:
                 print(f"Erreur : {e}. Réessayez.")
