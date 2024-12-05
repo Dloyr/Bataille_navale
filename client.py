@@ -16,7 +16,6 @@ PORT = 12345
 bateaux_dict = {"C": 5}
 taille_grille = 10
 
-
 def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
     grille_str = ["." for _ in range(grille_taille * grille_taille)]
     grille_double = [["." for _ in range(grille_taille)] for _ in range(grille_taille)]
@@ -33,8 +32,8 @@ def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
 
         while not placé:
             try:
-                x = int(input(f"Entrez l'abscisse (1-{grille_taille}) : ")) - 1
-                y = int(input(f"Entrez l'ordonnée (1-{grille_taille}) : ")) - 1
+                x = int(input(f"Entrez la valeur de x (0, {grille_taille - 1}) : ")) 
+                y = int(input(f"Entrez la valeur de y (0, {grille_taille - 1}) : "))
                 direction = input("Direction (h pour horizontal, v pour vertical) : ").lower()
 
                 if direction not in ["h", "v"]:
@@ -77,7 +76,7 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
     client.connect((IP, PORT))
     print("Connecté au serveur.\n")
 
-    player = {
+    joueur = {
         "grid": None,
         "history": [["." for _ in range(taille_grille)] for _ in range(taille_grille)]
     }
@@ -90,13 +89,14 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
             # Placement des bateaux et envoi de la grille au serveur
             grille_double = placement_bateaux(taille_grille, bateaux_dict)
 
-            player["grid"] = grille_double
+            joueur["grid"] = grille_double
             grille_envoyee = "".join(["".join(row) for row in grille_double])
             client.sendall(grille_envoyee.encode("utf-8"))
 
-        elif message_reçu == "C'est votre tour.":
-            sleep(1)
-            print(playerStr(player))
+        elif "C'est votre tour." in message_reçu:
+            # Affiche la grille actuelle avant de jouer
+            print("\nVotre grille actuelle :")
+            print(playerStr(joueur))
 
             try:
                 coord_char_int = input("Sur quelle cellule souhaitez-vous tirer : ")
@@ -106,19 +106,20 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
                 if not (0 <= coordonnées[0] < taille_grille and 0 <= coordonnées[1] < taille_grille):
                     raise ValueError("Coordonnées hors limites.")
 
-                str_coord = f"{coordonnées[0]},{coordonnées[1]}"
+                # Envoi des coordonnées au serveur
+                str_coord = f"{coordonnées[1]},{coordonnées[0]}"
                 client.sendall(str_coord.encode("utf-8"))
 
-                colonne = ord(coord_char_int[0].upper()) - ord("A")
-                ligne = int(coord_char_int[1])
-                tuple_coord = (colonne, ligne)
-                print(f"Tir effectué à : {tuple_coord}")
+                # Réception de la réponse du serveur
+                réponse = client.recv(1024).decode("utf-8")
+                print(réponse)
+
 
             except ValueError as e:
                 print(f"Erreur : {e}. Réessayez.")
                 continue
 
-        elif message_reçu == "Ce n'est pas votre tour.":
+        elif "Ce n'est pas votre tour." in message_reçu:
             print("En attente que l'adversaire joue...")
             sleep(3)
 
@@ -127,6 +128,12 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
             print("Déconnexion en cours...")
             break
 
-        elif message_reçu == "Fin de la partie.":
+        elif "Fin de la partie." in message_reçu:
             print("Partie terminée.")
             break
+        elif "Votre bateau" in message_reçu:
+            # Mise à jour de la grille après réception
+            grille_mise_a_jour = client.recv(1024).decode("utf-8")
+            joueur["grid"] = [
+                [grille_mise_a_jour[y * taille_grille + x] for x in range(taille_grille)] for y in range(taille_grille)
+            ]
