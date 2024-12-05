@@ -139,7 +139,6 @@ def mkGridFromString(s):
         .....S....
     Trailing empty lines are allowed.
     """
-
     return [[c for c in row] for row in s.strip("\n").split("\n")]
 
 def mkGridFromPos(boatPos):
@@ -276,6 +275,7 @@ def parseCoord(c):
     else:
         return (int(c[1]), ord(c[0])-ord("A"))
 
+print(parseCoord("A7"))
 
 
 def parseArg(args):
@@ -294,7 +294,7 @@ def parseArg(args):
         return players
 
 
-
+"""
 def main():
     players = parseArg(sys.argv) # load files for two players
     current_player = 0 # current player is player 0
@@ -341,3 +341,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+"""
