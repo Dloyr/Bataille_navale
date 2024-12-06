@@ -12,8 +12,7 @@ from time import sleep
 
 IP = "127.0.0.1"
 PORT = 12345
-
-bateaux_dict = {"C": 5}
+bateaux_dict = {"C":5, "B":4, "D":3, "S":3, "P":2}
 taille_grille = 10
 
 def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
@@ -71,6 +70,20 @@ def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
     afficher_grille(grille_str)
     return grille_double
 
+def mettre_a_jour_bateaux(bateaux: dict, bateau_touche: str):
+    """
+    Met à jour le dictionnaire des bateaux en fonction du bateau qui a été touché.
+    Si le bateau a coulé, il est retiré du dictionnaire.
+    """
+    if bateau_touche in bateaux:
+        bateaux[bateau_touche] -= 1  # On diminue la taille restante du bateau
+        
+        # Si la taille du bateau devient 0, il a coulé
+        if bateaux[bateau_touche] == 0:
+            print(f"Le bateau {bateau_touche} a coulé !")
+            del bateaux[bateau_touche]  # Supprimer le bateau du dictionnaire
+
+    return bateaux
 
 with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
     client.connect((IP, PORT))
@@ -129,14 +142,20 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
             sleep(3)
 
         elif "gagné" in message_reçu or "perdu" in message_reçu:
-            print(message_reçu)
-            print("Déconnexion en cours...")
+            print("Fin de la partie. Déconnexion en cours...")
+            sleep(5)
             break
 
-        elif "Fin de la partie." in message_reçu:
-            print("Partie terminée.")
-            break
         elif "Votre bateau" in message_reçu:
+            for c in message_reçu:
+                if c in ["C", "B", "D", "S", "P"]:
+                    bateau_touche = c
+            bateaux_dict = mettre_a_jour_bateaux(bateaux_dict, bateau_touche)
+            if bateau_touche not in bateaux_dict:
+                sleep(1)
+                client.sendall("Le bateau a coulé !".encode("utf-8"))
+                sleep(1)
+            
             # Mise à jour de la grille après réception
             grille_mise_a_jour = client.recv(1024).decode("utf-8")
             joueur["grid"] = [
