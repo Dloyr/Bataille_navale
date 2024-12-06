@@ -6,130 +6,148 @@ Dimitri Loyer
 Yasmine Sassi
 """
 
+from bataille_navale import shootAt, mkGridFromString, updateShoot
 from socket import *
 from threading import *
 from time import sleep # pour mettre un délais d'attente afin de laisser le temps au serveur d'envoyer les messages
+import json  # Ajout pour sérialisation/désérialisation des grilles
 
 adresse_serveur = ("127.0.0.1", 12345)
-grille_joueurs = { # création d'une grille pour chaque joueurs, pour l'exmple
-    1: [["?"] * 10 for _ in range(10)],
-    2: [["?"] * 10 for _ in range(10)]
-}
-
-# On place un navire de 3 cases en (2,2), (2,3), (2,4) sur chaques grilles
-grille_joueurs[1][2][2] = grille_joueurs[1][2][3] = grille_joueurs[1][2][4] = "A"
-grille_joueurs[2][3][5] = grille_joueurs[2][2][5] = grille_joueurs[2][1][5] = "A"
-
 tour_joueur = 1
 lock = Lock() # permet la synchronisation entre les clients
 clients = []
+grilles_des_joueurs =  {}
 
-def resultat_tir(joueur, x, y):
+def resultat_tir(joueur, coord_tir, client_actuel, client_adverse):
+    global grilles_des_joueurs
+    x, y = coord_tir
+    grille_adversaire = list(grilles_des_joueurs[3 - joueur])  # Convertir la chaîne en liste
+    index = y * 10 + x
+
+    if grille_adversaire[index] == ".":
+        # Raté
+        client_actuel.sendall("Raté...".encode("utf-8"))
+        client_adverse.sendall(f"L'adversaire a raté son tir.".encode("utf-8"))
+        sleep(1)
+    elif grille_adversaire[index] != "X":
+        # Touché
+        bateau_touche = grille_adversaire[index]
+        grille_adversaire[index] = "X"  # Marquer le tir
+        grilles_des_joueurs[3 - joueur] = ''.join(grille_adversaire)  # Mettre à jour la grille dans le dictionnaire
+        client_actuel.sendall("Touché !".encode("utf-8"))
+        sleep(1)
+        client_adverse.sendall(f"Votre bateau '{bateau_touche}' a été touché !".encode("utf-8"))
+        sleep(1)
+
+    grille_mise_a_jour = ''.join(grille_adversaire)
+    client_adverse.sendall(grille_mise_a_jour.encode("utf-8"))
+
+     # Vérification si tous les bateaux de l'adversaire sont coulés
+    if all(cell in [".", "X"] for cell in grille_adversaire):
+        sleep(1)
+        client_actuel.sendall("Tout les bateaux de votre adversaire ont été coulé.".encode("utf-8"))
+        sleep(1)
+        client_adverse.sendall("Tout vos bateaux ont été coulé.".encode("utf-8"))
+        sleep(0.5)
+        client_actuel.sendall("Vous avez gagné !".encode("utf-8"))
+        sleep(0.5)
+        client_adverse.sendall("Vous avez perdu !".encode("utf-8"))
+        return True  # Fin de partie
+
+    return False  # Partie continue
+
+def ajuster_grille(grille):
     """
-    Fonction pour transférer le resultat d'un tir
-
-        Arguments:
-            -joueur: le numéro du joueur actuel
-            -x: l'axe des abscisses
-            -y: l'axe des ordonnées
-
-        Retourne:
-            -Coulé !: Si toute les parties du navire sont touchées
-            -Touché !: Si une partie du navire est touchée
-            -Raté...: Si aucun navires n'a été touché par le tir
+    Cette fonction prend une grille (liste de listes) et la redimensionne à 10x10.
+    Si la grille a moins de 10 lignes ou colonnes, elle sera complétée avec des ".".
+    Si elle a plus de lignes ou de colonnes, elle sera tronquée.
     """
-    grille_du_tour = grille_joueurs[3 - joueur] # définit la grille à utiliser suivant le tour du joueur
-    if grille_du_tour[x][y] == "A":
-        grille_du_tour[x][y] = "X" #change le A par X si le joueur touche le navire
-        navire_coule = True
-        for ligne in grille_du_tour: #Vérifie si des cellules A sont encore présentes
-            for cellule in ligne:
-                if cellule == "A":
-                    navire_coule = False
-                    break
-            if not navire_coule:
-                break
+    # Compléter ou tronquer les lignes à 10 caractères
+    grille = [ligne[:10] for ligne in grille]  # Tronque les lignes trop longues
+    grille = [ligne + ['.'] * (10 - len(ligne)) for ligne in grille]  # Complète les lignes trop courtes
 
-        if navire_coule:
-            return "Coulé !"
-        else:
-            return "Touché !"
+    # Compléter ou tronquer le nombre de lignes à 10
+    if len(grille) < 10:
+        grille.extend([['.'] * 10] * (10 - len(grille)))  # Ajoute des lignes vides
     else:
-        return "Raté..."
+        grille = grille[:10]  # Tronque les lignes excédentaires
+
+    return grille
 
 def gestion_client(client_du_serveur, joueur):
-    """
-    Permet au serveur de gérer le bon déroulement de la partie
-
-        Arguments:
-        -client_du_serveur: Représente l'un des joueurs du serveur
-        -joueur: le numéro du joueur
-
-    """
     global tour_joueur
     autre_client = None
 
-#================================================INITIALISATION DE LA PARTIE================================================
     print("Un joueur s'est connecté en tant que joueur n°{}".format(joueur))
     if len(clients) == 2:
-        autre_client = clients[1 - (joueur - 1)] 
+        autre_client = clients[1 - (joueur - 1)]
 
+    # Initialisation des messages pour chaque joueur
     if joueur == 1:
         client_du_serveur.send("Bienvenue, ! En attente d'un second joueur...".encode("utf-8"))
     else:
-        client_du_serveur.send("Bienvenue ! La partie va commencer.".encode("utf-8"))
+        client_du_serveur.send("Bienvenue dans la Bataille Navale !".encode("utf-8"))
+        sleep(1)
+        client_du_serveur.send("Vous pouvez placer vos bateaux.".encode("utf-8"))
         if autre_client:
-            autre_client.send("La partie va commencer !".encode("utf-8"))
+            autre_client.send("Un joueur a été trouvé !".encode("utf-8"))
+            sleep(1)
+            autre_client.send("Vous pouvez placer vos bateaux.".encode("utf-8"))
 
-#================================================MISE EN PLACE DES TOURS DE JEU================================================
+    # Réception et sauvegarde de la grille
+    grille_recue = client_du_serveur.recv(1024).decode()
+    grilles_des_joueurs[joueur] = grille_recue
+
+    print("La grille du joueur {:d} a été sauvegardée.".format(joueur))
+    if len(grilles_des_joueurs) == 2:
+        client_du_serveur.send("Tous les bateaux ont été placés, la partie va commencer !".encode("utf-8"))
+        sleep(1)
+        autre_client.send("Tous les bateaux ont été placés, la partie va commencer !".encode("utf-8"))
+        sleep(1)
+
+    # Boucle principale du jeu
     while True:
         if len(clients) == 2:
-            autre_client = clients[1 - (joueur - 1)] 
-        else:
-            None
-
-        with lock: # permet la syncrhonisation de la variable entre les clients
-            if tour_joueur != joueur: # verifie si le tour du joueur correspond à son numéro
-                sleep(1)
-                client_du_serveur.send("Ce n'est pas votre tour.".encode("utf-8"))
-                if autre_client:
-                    sleep(1)
-                    autre_client.send("C'est votre tour.".encode("utf-8"))
-
-#================================================TRAITEMENT ET RÉPONSE DES ACTIONS EN JEU================================================
-        donnée = client_du_serveur.recv(1024).decode()
-        if not donnée:
-            break
-
-        x, y = map(int, donnée.split(','))
-        resultat_tour = resultat_tir(joueur, x, y)
-        client_du_serveur.send(resultat_tour.encode("utf-8"))
-
-        if autre_client:
-            message = ""
-            if resultat_tour == "Raté...":
-                message = "Votre adversaire à raté un navire !"
-            elif resultat_tour == "Touché !":
-                message = "Votre  adversaire a touché un navire !"
-            elif resultat_tour == "Coulé !":
-                autre_client.send("Votre adversaire à coulé un navire!".encode("utf-8"))
-                sleep(1)
-                client_du_serveur.send("Vous avez gagné !".encode("utf-8"))
-                sleep(1)
-                autre_client.send("Vous avez perdu !".encode("utf-8"))
-                sleep(1)
-                autre_client.send("Fin de la partie. ".encode("utf-8"))
-                client_du_serveur.send("Fin de la partie. ".encode("utf-8"))
-                break
-            autre_client.send(message.encode("utf-8"))
-
+            autre_client = clients[1 - (joueur - 1)]
 
         with lock:
-            tour_joueur = 3 - joueur #permet de changer le tour
+            if tour_joueur != joueur:
+                sleep(3)
+                client_du_serveur.send("Ce n'est pas votre tour.".encode("utf-8"))
+                sleep(1)
+                if autre_client:
+                    autre_client.send("C'est votre tour.".encode("utf-8"))
+                    sleep(1)
+
+        coord_tir = client_du_serveur.recv(1024).decode()
+        coord_tir_tuple = None
+        # Validation et conversion des coordonnées
+        if coord_tir != "Le bateau a coulé !":
+            print("Le serveur a bien reçu les coordonnées de tir : {}".format(coord_tir))
+            try:
+                x, y = map(int, coord_tir.split(","))
+                coord_tir_tuple = (x, y)
+            except ValueError:
+                print("Erreur : Coordonnées de tir invalides reçues.")
+                client_du_serveur.send("Coordonnées invalides.".encode("utf-8"))
+                continue
+        else:
+            autre_client.send("Vous avez coulé un bateau !".encode("utf-8"))
+            sleep(1)
+
+        if coord_tir_tuple:
+            partie_termine = resultat_tir(joueur, coord_tir_tuple, client_du_serveur, autre_client)
+        else:
+            continue  # Si coord_tir_tuple est None, on recommence
+
+        if partie_termine:
+            sleep(5)
+            break
+
+        with lock:
+            tour_joueur = 3 - joueur
 
     client_du_serveur.close()
-
-
 
 serveur = socket(AF_INET, SOCK_STREAM) # Configuration du serveur (IPv4 et TCP)
 serveur.bind(adresse_serveur) #Ouverture du serveur
