@@ -12,7 +12,7 @@ from time import sleep
 
 IP = "127.0.0.1"
 PORT = 12345
-bateaux_dict = {"C":5}
+bateaux_dict = {"C":5, "B":4, "D":3, "S":3, "P":2}
 taille_grille = 10
 
 def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
