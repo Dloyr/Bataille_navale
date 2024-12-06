@@ -41,6 +41,20 @@ def resultat_tir(joueur, coord_tir, client_actuel, client_adverse):
     grille_mise_a_jour = ''.join(grille_adversaire)
     client_adverse.sendall(grille_mise_a_jour.encode("utf-8"))
 
+     # Vérification si tous les bateaux de l'adversaire sont coulés
+    if all(cell in [".", "X"] for cell in grille_adversaire):
+        sleep(1)
+        client_actuel.sendall("Tout les bateaux de votre adversaire ont été coulé.".encode("utf-8"))
+        sleep(1)
+        client_adverse.sendall("Tout vos bateaux ont été coulé.".encode("utf-8"))
+        sleep(0.5)
+        client_actuel.sendall("Vous avez gagné !".encode("utf-8"))
+        sleep(0.5)
+        client_adverse.sendall("Vous avez perdu !".encode("utf-8"))
+        return True  # Fin de partie
+
+    return False  # Partie continue
+
 def ajuster_grille(grille):
     """
     Cette fonction prend une grille (liste de listes) et la redimensionne à 10x10.
@@ -86,6 +100,7 @@ def gestion_client(client_du_serveur, joueur):
     print("La grille du joueur {:d} a été sauvegardée.".format(joueur))
     if len(grilles_des_joueurs) == 2:
         client_du_serveur.send("Tous les bateaux ont été placés, la partie va commencer !".encode("utf-8"))
+        sleep(1)
         autre_client.send("Tous les bateaux ont été placés, la partie va commencer !".encode("utf-8"))
         sleep(1)
 
@@ -96,41 +111,42 @@ def gestion_client(client_du_serveur, joueur):
 
         with lock:
             if tour_joueur != joueur:
+                sleep(3)
                 client_du_serveur.send("Ce n'est pas votre tour.".encode("utf-8"))
+                sleep(1)
                 if autre_client:
-                    sleep(1)
                     autre_client.send("C'est votre tour.".encode("utf-8"))
+                    sleep(1)
 
         coord_tir = client_du_serveur.recv(1024).decode()
-        print("Le serveur a bien reçu les coordonnées de tir : {}".format(coord_tir))
-
+        coord_tir_tuple = None
         # Validation et conversion des coordonnées
-        try:
-            x, y = map(int, coord_tir.split(","))
-            coord_tir_tuple = (x, y)
-        except ValueError:
-            print("Erreur : Coordonnées de tir invalides reçues.")
-            client_du_serveur.send("Coordonnées invalides.".encode("utf-8"))
-            continue
+        if coord_tir != "Le bateau a coulé !":
+            print("Le serveur a bien reçu les coordonnées de tir : {}".format(coord_tir))
+            try:
+                x, y = map(int, coord_tir.split(","))
+                coord_tir_tuple = (x, y)
+            except ValueError:
+                print("Erreur : Coordonnées de tir invalides reçues.")
+                client_du_serveur.send("Coordonnées invalides.".encode("utf-8"))
+                continue
+        else:
+            autre_client.send("Vous avez coulé un bateau !".encode("utf-8"))
+            sleep(1)
 
-        # Appel à la fonction resultat_tir
-        resultat_tir(joueur, coord_tir_tuple, client_du_serveur, autre_client)
+        if coord_tir_tuple:
+            partie_termine = resultat_tir(joueur, coord_tir_tuple, client_du_serveur, autre_client)
+        else:
+            continue  # Si coord_tir_tuple est None, on recommence
+
+        if partie_termine:
+            sleep(5)
+            break
 
         with lock:
             tour_joueur = 3 - joueur
 
     client_du_serveur.close()
-""" 
-Bug fin de partie
-        # Fin de partie si tous les bateaux sont coulés
-        if all(cell == "." for row in grilles_des_joueurs[3 - joueur]["grid"] for cell in row):
-            client_du_serveur.send("Vous avez gagné !".encode("utf-8"))
-            autre_client.send("Vous avez perdu !".encode("utf-8"))
-            break
-"""
-
-
-
 
 serveur = socket(AF_INET, SOCK_STREAM) # Configuration du serveur (IPv4 et TCP)
 serveur.bind(adresse_serveur) #Ouverture du serveur
