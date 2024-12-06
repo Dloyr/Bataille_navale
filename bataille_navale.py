@@ -150,10 +150,6 @@ def mkGridFromPos(boatPos):
       'P': [(5, 8), (5, 9)],
       'S': [(6, 5), (7, 5), (8, 5)]
     }
-    /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\
-    The function will not complain if two boats sit on the same cell,
-    please use checkGrid to check that the grid is correct.
-    /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ 
 
     """
     grid = [["." for i in range(gridsize)] for j in range(gridsize)]
@@ -274,9 +270,6 @@ def parseCoord(c):
         raise ValueError
     else:
         return (int(c[1]), ord(c[0])-ord("A"))
-
-print(parseCoord("A7"))
-
 
 def parseArg(args):
     """
