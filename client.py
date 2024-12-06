@@ -12,7 +12,7 @@ from time import sleep
 
 IP = "127.0.0.1"
 PORT = 12345
-bateaux_dict = {"C":5, "B":4, "D":3, "S":3, "P":2}
+bateaux_dict = {"C":5}
 taille_grille = 10
 
 def placement_bateaux(grille_taille: int, dict_bateaux: dict[str, int]) -> list:
@@ -96,7 +96,10 @@ with socket(AF_INET, SOCK_STREAM) as client:  # Connexion au serveur de jeu
 
     while True:
         message_reçu = client.recv(1024).decode("utf-8")
-        print(message_reçu)
+        if ".........." in message_reçu:
+            continue
+        else:
+            print(message_reçu)
 
         if "Vous pouvez placer vos bateaux." in message_reçu:
             # Placement des bateaux et envoi de la grille au serveur
