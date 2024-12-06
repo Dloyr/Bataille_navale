@@ -27,7 +27,8 @@ def resultat_tir(joueur, coord_tir, client_actuel, client_adverse):
     if grille_adversaire[index] == ".":
         # Raté
         client_actuel.sendall("Raté...".encode("utf-8"))
-        client_adverse.sendall(f"L'adversaire a tiré sur ({x}, {y}) et a raté.".encode("utf-8"))
+        client_adverse.sendall(f"L'adversaire a raté son tir.".encode("utf-8"))
+        sleep(1)
     elif grille_adversaire[index] != "X":
         # Touché
         bateau_touche = grille_adversaire[index]
